@@ -68,8 +68,3 @@ java -cp out com.meditrack.Main
 
 No login is required. The app starts directly with the main menu.
 
-## Suggested Viva Explanation
-
-You can explain it like this:
-
-> My project is a clinic management system called MediTrack Java. It helps a small clinic store patient records, schedule appointments, manage medicine stock, generate bills, and view reports. I used object-oriented programming to divide the project into model classes, service classes, utility classes, and a Swing GUI class. Data is stored permanently in CSV files, so records are available even after closing the program.
