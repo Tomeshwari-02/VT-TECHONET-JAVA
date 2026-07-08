@@ -1,0 +1,6 @@
+out/
+*.class
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
