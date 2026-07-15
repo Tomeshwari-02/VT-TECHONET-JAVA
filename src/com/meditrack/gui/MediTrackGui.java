@@ -4,6 +4,7 @@ import com.meditrack.model.Appointment;
 import com.meditrack.model.Bill;
 import com.meditrack.model.Medicine;
 import com.meditrack.model.Patient;
+import com.meditrack.model.Prescription;
 import com.meditrack.util.FileStore;
 import com.meditrack.util.IdGenerator;
 
@@ -22,11 +23,16 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GradientPaint;
+import java.awt.RenderingHints;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -40,16 +46,25 @@ public class MediTrackGui extends JFrame {
     private static final String MEDICINES_FILE = "medicines.csv";
     private static final String APPOINTMENTS_FILE = "appointments.csv";
     private static final String BILLS_FILE = "bills.csv";
+    private static final String PRESCRIPTIONS_FILE = "prescriptions.csv";
+    private static final Color NAVY = new Color(15, 35, 65);
+    private static final Color BLUE = new Color(34, 102, 246);
+    private static final Color CYAN = new Color(24, 190, 207);
+    private static final Color SURFACE = new Color(242, 246, 252);
+    private static final Color TEXT = new Color(33, 43, 54);
 
     private final List<Patient> patients = new ArrayList<>();
     private final List<Medicine> medicines = new ArrayList<>();
     private final List<Appointment> appointments = new ArrayList<>();
     private final List<Bill> bills = new ArrayList<>();
+    private final List<Prescription> prescriptions = new ArrayList<>();
 
     private final DefaultTableModel patientTableModel = new DefaultTableModel(new String[]{"ID", "Name", "Age", "Gender", "Phone", "Symptoms"}, 0);
     private final DefaultTableModel medicineTableModel = new DefaultTableModel(new String[]{"ID", "Name", "Price", "Stock"}, 0);
     private final DefaultTableModel appointmentTableModel = new DefaultTableModel(new String[]{"ID", "Patient", "Department", "Doctor", "Date", "Time", "Status"}, 0);
     private final DefaultTableModel billTableModel = new DefaultTableModel(new String[]{"ID", "Patient", "Consultation", "Medicines", "Total", "Date"}, 0);
+    private final DefaultTableModel prescriptionTableModel = new DefaultTableModel(
+            new String[]{"ID", "Patient", "Doctor", "Diagnosis", "Prescription", "Suggested Tests", "Follow-up", "Created"}, 0);
 
     private final JTextField patientNameField = new JTextField(16);
     private final JTextField patientAgeField = new JTextField(8);
@@ -73,6 +88,12 @@ public class MediTrackGui extends JFrame {
     private final JTextField consultationFeeField = new JTextField(8);
     private final JTextField billQuantityField = new JTextField(8);
     private final JTextArea reportArea = new JTextArea(9, 34);
+    private final JComboBox<String> prescriptionPatientCombo = new JComboBox<>();
+    private final JTextField prescriptionDoctorField = new JTextField(16);
+    private final JTextField diagnosisField = new JTextField(18);
+    private final JTextArea prescriptionTextArea = new JTextArea(4, 20);
+    private final JTextArea suggestedTestsArea = new JTextArea(3, 20);
+    private final JTextField followUpDateField = new JTextField(12);
 
     public MediTrackGui() {
         super("MediTrack Java - Clinic Management System");
@@ -84,7 +105,7 @@ public class MediTrackGui extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
             } catch (Exception ignored) {
                 // Default Swing look is still fine for this project.
             }
@@ -94,14 +115,14 @@ public class MediTrackGui extends JFrame {
 
     private void buildInterface() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(980, 650));
+        setMinimumSize(new Dimension(1180, 760));
+        getContentPane().setBackground(SURFACE);
         setLocationRelativeTo(null);
 
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBorder(BorderFactory.createEmptyBorder(18, 22, 14, 22));
-        header.setBackground(new Color(31, 78, 121));
+        JPanel header = new GradientPanel(new BorderLayout());
+        header.setBorder(BorderFactory.createEmptyBorder(22, 30, 20, 30));
 
-        JLabel title = new JLabel("MediTrack Java");
+        JLabel title = new JLabel("MediTrack  |  Clinical Workspace");
         title.setForeground(Color.WHITE);
         title.setFont(new Font("Segoe UI", Font.BOLD, 28));
         header.add(title, BorderLayout.WEST);
@@ -112,7 +133,11 @@ public class MediTrackGui extends JFrame {
         header.add(subtitle, BorderLayout.SOUTH);
 
         JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        tabs.setBackground(Color.WHITE);
+        tabs.setForeground(TEXT);
         tabs.addTab("Patients", createPatientsPanel());
+        tabs.addTab("Clinical Notes", createPrescriptionsPanel());
         tabs.addTab("Medicines", createMedicinesPanel());
         tabs.addTab("Appointments", createAppointmentsPanel());
         tabs.addTab("Billing", createBillingPanel());
@@ -120,6 +145,7 @@ public class MediTrackGui extends JFrame {
 
         add(header, BorderLayout.NORTH);
         add(tabs, BorderLayout.CENTER);
+        styleComponents(this);
         pack();
     }
 
@@ -178,6 +204,42 @@ public class MediTrackGui extends JFrame {
 
         panel.add(form, BorderLayout.WEST);
         panel.add(new JScrollPane(createTable(medicineTableModel)), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createPrescriptionsPanel() {
+        JPanel panel = new JPanel(new BorderLayout(16, 16));
+        panel.setBackground(SURFACE);
+        panel.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+
+        JPanel form = new ShadowPanel(new GridBagLayout());
+        form.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEmptyBorder(8, 8, 10, 12),
+                BorderFactory.createTitledBorder("Doctor's Prescription & Diagnostic Plan")));
+        addFormRow(form, 0, "Patient", prescriptionPatientCombo);
+        addFormRow(form, 1, "Doctor", prescriptionDoctorField);
+        addFormRow(form, 2, "Diagnosis", diagnosisField);
+
+        prescriptionTextArea.setLineWrap(true);
+        prescriptionTextArea.setWrapStyleWord(true);
+        suggestedTestsArea.setLineWrap(true);
+        suggestedTestsArea.setWrapStyleWord(true);
+        addFormRow(form, 3, "Medicines / Instructions", new JScrollPane(prescriptionTextArea));
+        addFormRow(form, 4, "Suggested Tests", new JScrollPane(suggestedTestsArea));
+        addFormRow(form, 5, "Follow-up (YYYY-MM-DD)", followUpDateField);
+
+        JButton saveButton = new JButton("Save Clinical Note");
+        saveButton.addActionListener(event -> savePrescription());
+        addButtonRow(form, 6, saveButton);
+
+        JPanel history = new ShadowPanel(new BorderLayout(8, 8));
+        history.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEmptyBorder(8, 8, 10, 12),
+                BorderFactory.createTitledBorder("Patient Clinical History")));
+        history.add(new JScrollPane(createTable(prescriptionTableModel)), BorderLayout.CENTER);
+
+        panel.add(form, BorderLayout.WEST);
+        panel.add(history, BorderLayout.CENTER);
         return panel;
     }
 
@@ -240,8 +302,19 @@ public class MediTrackGui extends JFrame {
 
     private JTable createTable(DefaultTableModel model) {
         JTable table = new JTable(model);
-        table.setRowHeight(26);
+        table.setRowHeight(34);
         table.setAutoCreateRowSorter(true);
+        table.setShowVerticalLines(false);
+        table.setGridColor(new Color(226, 232, 240));
+        table.setSelectionBackground(new Color(219, 234, 254));
+        table.setSelectionForeground(TEXT);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 13));
+        table.getTableHeader().setBackground(NAVY);
+        table.getTableHeader().setForeground(Color.WHITE);
+        DefaultTableCellRenderer renderer = new DefaultTableCellRenderer();
+        renderer.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
+        table.setDefaultRenderer(Object.class, renderer);
         return table;
     }
 
@@ -380,6 +453,35 @@ public class MediTrackGui extends JFrame {
         }
     }
 
+    private void savePrescription() {
+        try {
+            String followUp = requireText(followUpDateField, "Follow-up date");
+            LocalDate.parse(followUp);
+            String medicinesText = prescriptionTextArea.getText().trim();
+            if (medicinesText.isBlank()) throw new IllegalArgumentException("Prescription instructions are required.");
+            String testsText = suggestedTestsArea.getText().trim();
+            if (testsText.isBlank()) testsText = "No tests suggested";
+
+            Prescription prescription = new Prescription(
+                    IdGenerator.nextId("RX", prescriptions.size(), 10000),
+                    selectedId(prescriptionPatientCombo),
+                    requireText(prescriptionDoctorField, "Doctor name"),
+                    requireText(diagnosisField, "Diagnosis"),
+                    medicinesText, testsText, followUp, LocalDate.now().toString());
+            prescriptions.add(prescription);
+            FileStore.appendLine(PRESCRIPTIONS_FILE, prescription.toCsv());
+            clear(prescriptionDoctorField, diagnosisField, followUpDateField);
+            prescriptionTextArea.setText("");
+            suggestedTestsArea.setText("");
+            refreshAllViews();
+            showMessage("Prescription and suggested tests saved to the patient's clinical history.");
+        } catch (java.time.format.DateTimeParseException error) {
+            showError("Follow-up date must use YYYY-MM-DD format.");
+        } catch (IllegalArgumentException error) {
+            showError(error.getMessage());
+        }
+    }
+
     private void loadData() {
         for (String line : FileStore.readLines(PATIENTS_FILE)) {
             if (!line.isBlank()) {
@@ -401,6 +503,15 @@ public class MediTrackGui extends JFrame {
                 bills.add(Bill.fromCsv(line));
             }
         }
+        for (String line : FileStore.readLines(PRESCRIPTIONS_FILE)) {
+            if (!line.isBlank()) {
+                try {
+                    prescriptions.add(Prescription.fromCsv(line));
+                } catch (IllegalArgumentException error) {
+                    System.out.println("Skipped invalid prescription record: " + error.getMessage());
+                }
+            }
+        }
     }
 
     private void refreshAllViews() {
@@ -408,6 +519,7 @@ public class MediTrackGui extends JFrame {
         refreshMedicineTable();
         refreshAppointmentTable();
         refreshBillTable();
+        refreshPrescriptionTable();
         refreshCombos();
         refreshReport();
     }
@@ -458,13 +570,24 @@ public class MediTrackGui extends JFrame {
         }
     }
 
+    private void refreshPrescriptionTable() {
+        prescriptionTableModel.setRowCount(0);
+        for (Prescription prescription : prescriptions) {
+            prescriptionTableModel.addRow(new Object[]{prescription.getId(), patientDisplayName(prescription.getPatientId()),
+                    prescription.getDoctor(), prescription.getDiagnosis(), prescription.getMedicines(),
+                    prescription.getSuggestedTests(), prescription.getFollowUpDate(), prescription.getCreatedDate()});
+        }
+    }
+
     private void refreshCombos() {
         appointmentPatientCombo.removeAllItems();
         billPatientCombo.removeAllItems();
+        prescriptionPatientCombo.removeAllItems();
         for (Patient patient : patients) {
             String label = patient.getId() + " - " + patient.getName();
             appointmentPatientCombo.addItem(label);
             billPatientCombo.addItem(label);
+            prescriptionPatientCombo.addItem(label);
         }
 
         billMedicineCombo.removeAllItems();
@@ -492,11 +615,17 @@ public class MediTrackGui extends JFrame {
                 Total patients      : %d
                 Total appointments  : %d
                 Total bills         : %d
+                Clinical notes      : %d
                 Total revenue       : Rs.%.2f
                 Low-stock medicines : %d
 
                 Data is saved permanently in CSV files.
-                """, patients.size(), appointments.size(), bills.size(), revenue, lowStock));
+                """, patients.size(), appointments.size(), bills.size(), prescriptions.size(), revenue, lowStock));
+    }
+
+    private String patientDisplayName(String patientId) {
+        return patients.stream().filter(p -> p.getId().equals(patientId))
+                .map(p -> p.getId() + " - " + p.getName()).findFirst().orElse(patientId);
     }
 
     private void saveMedicines() {
@@ -541,5 +670,67 @@ public class MediTrackGui extends JFrame {
 
     private void showError(String message) {
         JOptionPane.showMessageDialog(this, message, "Input Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void styleComponents(java.awt.Container container) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof JButton button) {
+                button.setBackground(BLUE);
+                button.setForeground(Color.WHITE);
+                button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                button.setFocusPainted(false);
+                button.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(24, 80, 200), 1, true),
+                        BorderFactory.createEmptyBorder(9, 15, 9, 15)));
+                button.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+            } else if (component instanceof JTextField field) {
+                field.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+                field.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(203, 213, 225), 1, true),
+                        BorderFactory.createEmptyBorder(7, 9, 7, 9)));
+            } else if (component instanceof JComboBox<?> combo) {
+                combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+                combo.setBackground(Color.WHITE);
+            } else if (component instanceof JLabel label && label.getForeground().equals(Color.BLACK)) {
+                label.setForeground(TEXT);
+                label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            } else if (component instanceof JPanel panel && !(panel instanceof GradientPanel) && !(panel instanceof ShadowPanel)) {
+                panel.setBackground(SURFACE);
+            }
+            if (component instanceof java.awt.Container child) styleComponents(child);
+        }
+    }
+
+    private static class GradientPanel extends JPanel {
+        GradientPanel(java.awt.LayoutManager layout) { super(layout); setOpaque(false); }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setPaint(new GradientPaint(0, 0, NAVY, getWidth(), getHeight(), new Color(25, 104, 171)));
+            g.fillRect(0, 0, getWidth(), getHeight());
+            g.setColor(new Color(CYAN.getRed(), CYAN.getGreen(), CYAN.getBlue(), 45));
+            g.fillOval(getWidth() - 220, -100, 310, 240);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static class ShadowPanel extends JPanel {
+        ShadowPanel(java.awt.LayoutManager layout) {
+            super(layout);
+            setOpaque(false);
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(15, 23, 42, 25));
+            g.fillRoundRect(6, 7, getWidth() - 9, getHeight() - 10, 20, 20);
+            g.setColor(Color.WHITE);
+            g.fillRoundRect(1, 1, getWidth() - 9, getHeight() - 10, 20, 20);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
     }
 }
